@@ -1,0 +1,765 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>David Gallardo</title><link>https://example.com/</link><description>Recent content on David Gallardo</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 16 Feb 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://example.com/index.xml" rel="self" type="application/rss+xml"/><item><title>Building a website to display the scraped data</title><link>https://example.com/p/building-a-website-to-display-the-scraped-data/</link><pubDate>Tue, 16 Feb 2021 00:00:00 +0000</pubDate><guid>https://example.com/p/building-a-website-to-display-the-scraped-data/</guid><description>&lt;img src="https://example.com/p/building-a-website-to-display-the-scraped-data/flask_logo.svg" alt="Featured image of post Building a website to display the scraped data" />&lt;h2 id="project-description">Project Description&lt;/h2>
+&lt;p>Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.&lt;/p>
+&lt;p>There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice. As for the interaction with MongoDB, we are already familiar with pymongo, as we used it before to store the scraped data into the collection, so we will use it again. Finally, in the front-end, we will make use of AJAX to implement some sort of pagination on the results without having to reload the page.&lt;/p>
+&lt;p>Before we get to work, I will show you a screenshot of the final webpage for you to get an idea of the intended result :&lt;/p>
+&lt;p>&lt;figure style="flex-grow: 113; flex-basis: 272px">
+&lt;a href="https://example.com/p/building-a-website-to-display-the-scraped-data/screenshot2.png" data-size="800x704">&lt;img src="https://example.com/p/building-a-website-to-display-the-scraped-data/screenshot2.png"
+srcset="https://example.com/p/building-a-website-to-display-the-scraped-data/screenshot2_hu96b59ee46ae172efcb00271080e38eae_212919_480x0_resize_box_2.png 480w, https://example.com/p/building-a-website-to-display-the-scraped-data/screenshot2_hu96b59ee46ae172efcb00271080e38eae_212919_1024x0_resize_box_2.png 1024w"
+width="800"
+height="704"
+loading="lazy"
+alt="Screenshot">
+&lt;/a>
+&lt;figcaption>Screenshot&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>As you can see our website allows to make the following queries:&lt;/p>
+&lt;ul>
+&lt;li>Filter reviews by genre, platform, reviewer and posted date.&lt;/li>
+&lt;li>Search reviews by game name.&lt;/li>
+&lt;li>Sort the displayed results either by score or posted date.&lt;/li>
+&lt;/ul>
+&lt;h2 id="mongodb-queries">MongoDB queries&lt;/h2>
+&lt;p>There will be two types of queries in our application: 1) search by name queries; and 2) filter queries. The latter ones have two types of conditions: equality conditions (using the $and operator if more than one condition on the same field) and range conditions (using $gt and/or $lt). Also in the latter case, it is possible to sort the results either by posted date or score of the review.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_result&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;genre&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;, &amp;#34;&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">join&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;genre&amp;#34;&lt;/span>&lt;span class="p">])&lt;/span>
+&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;platforms&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;, &amp;#34;&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">join&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;platforms&amp;#34;&lt;/span>&lt;span class="p">])&lt;/span>
+&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;release_date&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">str&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;release_date&amp;#34;&lt;/span>&lt;span class="p">])&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39; &amp;#39;&lt;/span>&lt;span class="p">)[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;score&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">int&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;score&amp;#34;&lt;/span>&lt;span class="p">])&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">result&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">list_reviews&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">collection&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">filter_dict&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">sort_by&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s2">&amp;#34;release_date&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">offset&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">page_size&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">cursor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">collection&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">find&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">filter_dict&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sort&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">sort_by&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">pymongo&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">DESCENDING&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">offset&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">cursor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cursor&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">skip&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">offset&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">cursor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cursor&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">limit&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">page_size&lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">results&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">_process_result&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">cursor&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">has_next&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">len&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">results&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">page_size&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">has_next&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">[:&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">],&lt;/span> &lt;span class="n">has_next&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">has_next&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">search_by_name&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">collection&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">max_number_results&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">5&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">query&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;game_name&amp;#34;&lt;/span>&lt;span class="p">:{&lt;/span>&lt;span class="s2">&amp;#34;$regex&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;$options&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s1">&amp;#39;i&amp;#39;&lt;/span>&lt;span class="p">}}&lt;/span>
+&lt;span class="n">cursor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">collection&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">find&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">query&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">limit&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">max_number_results&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">_process_result&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">cursor&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">build_query&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">eq_filters&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">range_filters&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">filter_dict&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{}&lt;/span>
+&lt;span class="n">and_cond&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[]&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">field&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">eq_conds&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">eq_filters&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">items&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="nb">len&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">eq_conds&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">filter_dict&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">field&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">eq_conds&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">and_cond&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="p">[{&lt;/span>&lt;span class="n">field&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">value&lt;/span>&lt;span class="p">}&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">value&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">eq_conds&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">and_cond&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">filter_dict&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;$and&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">and_cond&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">range_field&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">inf_limit&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">sup_limit&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">range_filters&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">items&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="n">_range_filter&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="n">range_field&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">{}}&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">inf_limit&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">_range_filter&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">range_field&lt;/span>&lt;span class="p">][&lt;/span>&lt;span class="s2">&amp;#34;$gt&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">inf_limit&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">sup_limit&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">_range_filter&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">range_field&lt;/span>&lt;span class="p">][&lt;/span>&lt;span class="s2">&amp;#34;$lt&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">sup_limit&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">_range_filter&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">range_field&lt;/span>&lt;span class="p">]:&lt;/span>
+&lt;span class="n">filter_dict&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">_range_filter&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">filter_dict&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Note that we request page_size+1 elements in &lt;code>list_reviews()&lt;/code> so that we can check if there are more than PAGE_SIZE matches. This will be useful later on, when we implement the pagination of results.&lt;/p>
+&lt;h2 id="flask-routing-and-jinja-templates">Flask Routing and Jinja Templates&lt;/h2>
+&lt;p>There will be only two URLs (or routes) in our application: 1) “/index” (or just “/”) used by the end user to access the webpage in the browser; and 2) “/list” used by the JavaScript code to request results by means of AJAX.&lt;/p>
+&lt;p>The view function associated with the first route is really simple as it just renders a Jinja Template. This template is what actually does all the heavy lifting here, so we will focus on it.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-html" data-lang="html">{% macro display_options(opts_name, opts_type, items, type) -%}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;dropdown pull-left&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">button&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;btn btn-default dropdown-toggle&amp;#34;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;button&amp;#34;&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;dropdownMenu1&amp;#34;&lt;/span> &lt;span class="na">data-toggle&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;dropdown&amp;#34;&lt;/span>
+&lt;span class="na">aria-haspopup&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;true&amp;#34;&lt;/span> &lt;span class="na">aria-expanded&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;true&amp;#34;&lt;/span> &lt;span class="na">name&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{opts_type}}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{{opts_name}}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;caret&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">button&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">ul&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;dropdown-menu checkbox-menu allow-focus&amp;#34;&lt;/span> &lt;span class="na">aria-labelledby&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;dropdownMenu1&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{% for value in items %}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">li&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">label&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">input&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{type}}&amp;#34;&lt;/span> &lt;span class="na">autocomplete&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;off&amp;#34;&lt;/span> &lt;span class="na">name&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{value}}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span> {{value}}
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">label&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">li&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{% endfor %}
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">ul&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{%- endmacro %}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">html&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">head&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">title&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Game Reviews&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">title&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">meta&lt;/span> &lt;span class="na">charset&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;utf-8&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">meta&lt;/span> &lt;span class="na">http-equiv&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;X-UA-Compatible&amp;#34;&lt;/span> &lt;span class="na">content&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;IE=edge&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">meta&lt;/span> &lt;span class="na">name&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;viewport&amp;#34;&lt;/span> &lt;span class="na">content&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;width=device-width, initial-scale=1&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">link&lt;/span> &lt;span class="na">rel&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;stylesheet&amp;#34;&lt;/span> &lt;span class="na">href&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;css/bootstrap.min.css&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">link&lt;/span> &lt;span class="na">rel&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;stylesheet&amp;#34;&lt;/span> &lt;span class="na">href&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;css/styles.css&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">link&lt;/span> &lt;span class="na">href&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;https://fonts.googleapis.com/css?family=Oxygen:400,300,700&amp;#39;&lt;/span> &lt;span class="na">rel&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;stylesheet&amp;#39;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;text/css&amp;#39;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">link&lt;/span> &lt;span class="na">href&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;https://fonts.googleapis.com/css?family=Lora&amp;#39;&lt;/span> &lt;span class="na">rel&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;stylesheet&amp;#39;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#39;text/css&amp;#39;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="kr">const&lt;/span> &lt;span class="nx">request_params&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{{&lt;/span> &lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">args&lt;/span>&lt;span class="o">|&lt;/span> &lt;span class="nx">tojson&lt;/span> &lt;span class="o">|&lt;/span> &lt;span class="nx">safe&lt;/span>&lt;span class="p">}};&lt;/span>
+&lt;span class="kr">const&lt;/span> &lt;span class="nx">request_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;{{ url_for(&amp;#39;list_reviews&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">script&lt;/span> &lt;span class="na">src&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;js/ajax-utils.js&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">script&lt;/span> &lt;span class="na">src&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;js/jquery-2.1.4.min.js&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">script&lt;/span> &lt;span class="na">src&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;js/bootstrap.min.js&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">script&lt;/span> &lt;span class="na">src&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;{{ url_for(&amp;#39;static&amp;#39;, filename=&amp;#39;js/script.js&amp;#39;) }}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">head&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">body&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">nav&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar navbar-inverse&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;container&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar-header&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">button&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;button&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar-toggle collapsed&amp;#34;&lt;/span> &lt;span class="na">data-toggle&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;collapse&amp;#34;&lt;/span> &lt;span class="na">data-target&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;#navbar&amp;#34;&lt;/span>
+&lt;span class="na">aria-expanded&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;false&amp;#34;&lt;/span> &lt;span class="na">aria-controls&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;sr-only&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Toggle navigation&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;icon-bar&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;icon-bar&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;icon-bar&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">button&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar-brand&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">a&lt;/span> &lt;span class="na">href&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;/index&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">h1&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Game Reviews&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">h1&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">a&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar-collapse collapse&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">form&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;navbar-form navbar-right&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;form-group&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">input&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;search-filter-text&amp;#34;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;text&amp;#34;&lt;/span> &lt;span class="na">placeholder&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;Search&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;form-control&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">button&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;search-filter-btn&amp;#34;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;submit&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;btn btn-success&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Search&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">button&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">form&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="c">&amp;lt;!--/.navbar-collapse --&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">nav&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;jumbotron&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;container&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{{display_options(&amp;#34;Genres&amp;#34;, &amp;#34;genre&amp;#34;, genres, type=&amp;#34;checkbox&amp;#34;)}}
+{{display_options(&amp;#34;Platforms&amp;#34;, &amp;#34;platforms&amp;#34;, platforms, type=&amp;#34;checkbox&amp;#34;)}}
+{{display_options(&amp;#34;Reviewers&amp;#34;, &amp;#34;reviewer&amp;#34;, reviewers, type=&amp;#34;radio&amp;#34;)}}
+{{display_options(&amp;#34;Posted date&amp;#34;, &amp;#34;posted_date&amp;#34;, dates_intervals, type=&amp;#34;radio&amp;#34;)}}
+{{display_options(&amp;#34;Sort by&amp;#34;, &amp;#34;order&amp;#34;, {&amp;#34;release_date&amp;#34;:&amp;#34;Posted date&amp;#34;, &amp;#34;score&amp;#34;:&amp;#34;Score&amp;#34;}, type=&amp;#34;radio&amp;#34;)}}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">button&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;filter-btn&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;btn btn-primary&amp;#34;&lt;/span> &lt;span class="na">type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;button&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Filter &lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span>
+&lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;glyphicon glyphicon-filter&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">button&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;container&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;main-content&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">body&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">html&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>In the html head, not only are we importing css and Javascript files (using &lt;code>url_for()&lt;/code> to get its location) as we would do on plain HTML, but we are also defining two Javascript variables that will be available on the global scope: &lt;code>request_params&lt;/code> and &lt;code>request_url&lt;/code>. The latter is just the URL for “/list” that will be used in the AJAX calls. On the flip side, the former is a Javascript object with the request arguments of the AJAX call. Notice that Flask makes the request object available in the template. An example of request_params would be:&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-json" data-lang="json">&lt;span class="p">{&lt;/span>
+&lt;span class="err">genres:&lt;/span> &lt;span class="err">[&lt;/span>&lt;span class="nt">&amp;#34;Acción&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nt">&amp;#34;RPG&amp;#34;&lt;/span>&lt;span class="err">]&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="err">platforms:&lt;/span> &lt;span class="nt">&amp;#34;PS4&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="err">posted_date:&lt;/span> &lt;span class="nt">&amp;#34;Anytime&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="err">reviewer:&lt;/span> &lt;span class="nt">&amp;#34;any&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="err">sort_by:&lt;/span> &lt;span class="nt">&amp;#34;score&amp;#34;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>In the html body we define the filtering menu and the search bar. Note that we make use of the &lt;code>display_options()&lt;/code> macro to avoid code duplication. Also note the empty “main-content” div. Here is where the HTML obtained via AJAX will be located.&lt;/p>
+&lt;p>The view function associated with the second route is more complex as it gets the request arguments, transforms them into a MongoDB query, runs that query and finally renders the HTML that displays re retrieved results. The python code which does that is the following:&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">def&lt;/span> &lt;span class="nf">extract_eq_filters&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="n">eq_filters&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{}&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">key&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">val&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">items&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">key&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;reviewer&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;platforms&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;genre&amp;#34;&lt;/span>&lt;span class="p">]:&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">key&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="s2">&amp;#34;reviewer&amp;#34;&lt;/span> &lt;span class="ow">and&lt;/span> &lt;span class="n">val&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="s2">&amp;#34;any&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="k">continue&lt;/span>
+&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="k">continue&lt;/span>
+&lt;span class="n">eq_filters&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">key&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">val&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;,&amp;#39;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">eq_filters&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">extract_range_filters&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="n">range_filters&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{}&lt;/span>
+&lt;span class="n">date_interval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;posted_date&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;Anytime&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">date_interval&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;Past week&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;Past month&amp;#34;&lt;/span>&lt;span class="p">]:&lt;/span>
+&lt;span class="n">today&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">datetime&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">date&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">now&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">range_filters&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;release_date&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;Past week&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">today&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">datetime&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">timedelta&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">days&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">7&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">today&lt;/span>&lt;span class="p">),&lt;/span>
+&lt;span class="s2">&amp;#34;Past month&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">today&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">datetime&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">timedelta&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">days&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">30&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">today&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">}[&lt;/span>&lt;span class="n">date_interval&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">range_filters&lt;/span>
+&lt;span class="nd">@app&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">route&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;/list&amp;#39;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">list_reviews&lt;/span>&lt;span class="p">():&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="s2">&amp;#34;search&amp;#34;&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">reviews&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">db&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">search_by_name&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">coll&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;search&amp;#34;&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;span class="n">has_next&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="kc">False&lt;/span>
+&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">eq_filters&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">extract_eq_filters&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">range_filters&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">extract_range_filters&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">query&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">db&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">build_query&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">eq_filters&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">range_filters&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">order&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;order&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;release_date&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">page_num&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">int&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;page_num&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;span class="n">reviews&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">has_next&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">db&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">list_reviews&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">coll&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">query&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">page_size&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">PAGE_SIZE&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">offset&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">page_num&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">PAGE_SIZE&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">sort_by&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">order&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">render_template&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;list.html&amp;#39;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">reviews&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">reviews&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">has_next&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">has_next&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>First, we determine whether the request is a search by name query or a filter query. If it is the former, we retrieve some reviews by using &lt;code>db.search_by_name()&lt;/code>. If it is the latter, we extract the equality and range filters, the ordering and the pagination offset from the request object. Next we use &lt;code>db.list_reviews()&lt;/code> to retrieve PAGE_SIZE number of reviews. Finally, we render the results in a template.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-html" data-lang="html">{% for review in reviews %}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;review review-{{review.reviewer}}&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;grid-top grid-left&amp;#34;&lt;/span> &lt;span class="na">style&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;text-align: center;&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;score-wrapper&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>{{review.score}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">span&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;grid-top grid-right&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{{ reviewers_logos[review.reviewer] | safe}}
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;grid-botton grid-left&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Plataformas&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>: {{review.platforms}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Géneros&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>: {{review.genre}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Fecha de publicación&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>: {{review.release_date}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">p&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;grid-botton grid-right&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">h3&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>{{review.title}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">strong&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">h3&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">h5&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>{{review.description}}&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">h5&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">style&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;clear: both;&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{% endfor %}
+{% if has_next %}
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">div&lt;/span> &lt;span class="na">style&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;text-align: center;&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="nt">button&lt;/span> &lt;span class="na">id&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;next_page&amp;#34;&lt;/span> &lt;span class="na">class&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s">&amp;#34;btn btn-primary btn-lg&amp;#34;&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>Next page&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">button&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+&lt;span class="p">&amp;lt;/&lt;/span>&lt;span class="nt">div&lt;/span>&lt;span class="p">&amp;gt;&lt;/span>
+{% endif %}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Note that if there are more than PAGE_SIZE elements matching the query, we will render a “More Results” button.&lt;/p>
+&lt;h2 id="javascript">Javascript&lt;/h2>
+&lt;p>Earlier in this article, I have stated the reason for using AJAX in our web application: paginate the results coming from the MongoDB collection without having to reload the page each time. Right after the page is loaded an AJAX request will be made to retrieve the first PAGE_SIZE reviews. Thanks to the request_params variable that we created server side, the Javascript code knows the filter parameters to query. Another AJAX request will be made if we click on the “More Results” button. Responses of AJAX requests are inserted in the “main-content” div.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-js" data-lang="js">
+&lt;span class="kr">const&lt;/span> &lt;span class="nx">ajax_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nx">URL&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">request_url&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">document&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">location&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="kr">const&lt;/span> &lt;span class="nx">ajax_params&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nx">URLSearchParams&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">request_params&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">ajax_url&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">search&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">ajax_params&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">page_num&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="nx">sendGetRequest&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">requestUrl&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">responseHandler&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="nx">isJsonResponse&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nx">XMLHttpRequest&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">onreadystatechange&lt;/span> &lt;span class="o">=&lt;/span>
+&lt;span class="kd">function&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="nx">handleResponse&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">request&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="nx">responseHandler&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="nx">isJsonResponse&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">open&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;GET&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">requestUrl&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kc">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">send&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kc">null&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// for POST only
+&lt;/span>&lt;span class="c1">&lt;/span> &lt;span class="p">}&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="nx">handleResponse&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">request&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="nx">responseHandler&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="nx">isJsonResponse&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">((&lt;/span>&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">readyState&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">4&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">status&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">200&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="nx">responseHandler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">request&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">responseText&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="nx">insert_new_content&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">main_div&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">responseText&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">new_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">document&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">createElement&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;div&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">new_div&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">innerHTML&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">responseText&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="nx">main_div&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">appendChild&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">new_div&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">next_page_button&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">main_div&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">querySelector&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;#next_page&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="nx">next_page_button&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;span class="nx">next_page_button&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">addEventListener&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;click&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">next_page&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kc">false&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="nb">document&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">addEventListener&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;DOMContentLoaded&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kd">function&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="nx">event&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="nx">sendGetRequest&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="nx">ajax_url&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">toString&lt;/span>&lt;span class="p">(),&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="nx">responseText&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">main_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">document&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">querySelector&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;#main-content&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">insert_new_content&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">main_div&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">responseText&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">});&lt;/span>
+&lt;span class="p">});&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="nx">next_page&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="nx">page_num&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="nx">ajax_params&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">set&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;page_num&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">page_num&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">ajax_url&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">search&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">ajax_params&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="nx">console&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">log&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">ajax_url&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">toString&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;span class="nx">$ajaxUtils&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">sendGetRequest&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="nx">ajax_url&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">toString&lt;/span>&lt;span class="p">(),&lt;/span>
+&lt;span class="kd">function&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="nx">responseText&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="kd">var&lt;/span> &lt;span class="nx">main_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">document&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">querySelector&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;#main-content&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="nx">main_div&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">querySelector&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;#next_page&amp;#34;&lt;/span>&lt;span class="p">).&lt;/span>&lt;span class="nx">remove&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="nx">insert_new_content&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">main_div&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nx">responseText&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="kc">false&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>In this post we have created a web application to help us explore the data we collected previously from game reviews websites. We have used Flask to this end as it has all the features we needed while giving us full control over the structure of our project. As for the client side, we made use of AJAX to implement the pagination of the results.&lt;/p></description></item><item><title>Scraping Game Reviews Websites with Scrapy and Selenium</title><link>https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/</link><pubDate>Tue, 16 Feb 2021 00:00:00 +0000</pubDate><guid>https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/</guid><description>&lt;img src="https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy.png" alt="Featured image of post Scraping Game Reviews Websites with Scrapy and Selenium" />&lt;h2 id="project-description">Project Description&lt;/h2>
+&lt;p>Videogames are among my favorite hobbies. I usually buy a couple of games every month so that I always have something to play in my spare time. This means I need to spend some time every day reading games reviews and articles in order to to keep myself up to date. Sure this is a good way of taking my mind off work, but lately I am getting a bit tired of it. Could I automate this procress of going trhough several website in search of game reviews?. Of course yes, and that is why in this post we will create together a web scraper to extract reviews from several websites. To this end, we will make use of the web scraping framework Scrapy. The reason for this, is that it comes with a lot of features out of the box which prevent us from reinventing the wheel each time we decide to scrape a new site.&lt;/p>
+&lt;h2 id="scrapy-architecture">Scrapy Architecture&lt;/h2>
+&lt;p>Before diving into web crawling with Scrapy, we will look into its internals, so that we can make a better use of it. Scrapy’s official documentation uses the following diagram to showcase the data flow that takes place under the scenes.&lt;/p>
+&lt;p>&lt;figure style="flex-grow: 148; flex-basis: 357px">
+&lt;a href="https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy_architecture2.png" data-size="800x537">&lt;img src="https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy_architecture2.png"
+srcset="https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy_architecture2_hu7f20646b04d9e2c3619cbbf6f228a0a1_66570_480x0_resize_box_2.png 480w, https://example.com/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy_architecture2_hu7f20646b04d9e2c3619cbbf6f228a0a1_66570_1024x0_resize_box_2.png 1024w"
+width="800"
+height="537"
+loading="lazy"
+alt="Scrapy Architecture">
+&lt;/a>
+&lt;figcaption>Scrapy Architecture&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>At first glance, you might think this architecture is a little over-engineered, but trust me, it is much simpler that it seems, plus it allows for a ton of customization. Let&amp;rsquo;s give a brief description of the main components of Scrapy:&lt;/p>
+&lt;p>&lt;strong>Engine&lt;/strong>&lt;/p>
+&lt;p>The Engine orchestrates everything that happens inside Scrapy, passing messages between components following the data flow presented above.&lt;/p>
+&lt;p>&lt;strong>Downloader&lt;/strong>&lt;/p>
+&lt;p>The Downloader is responsible for downloading webpages. It receives requests from the Engine, sends HTTP requests in order to fetch the webpage and returns the response to the Engine without any further processing.&lt;/p>
+&lt;p>&lt;strong>Scheduler&lt;/strong>&lt;/p>
+&lt;p>The Scheduler is responsible for timing the web crawling. It receives requests from the Engine and enqueues them following a given policy.&lt;/p>
+&lt;p>&lt;strong>Spider&lt;/strong>&lt;/p>
+&lt;p>Spiders are responsibles for parsing web pages. After processing a web page the spider can either return additional requests to be enqueued in the Scheduler or items to be processed by the Item Pipeline.&lt;/p>
+&lt;p>&lt;strong>Item Pipeline&lt;/strong>&lt;/p>
+&lt;p>The Item pipeline processes the items once they have been extracted by the Spider. Typical uses of the item pipeline are cleaning, validation and storage of the item in a database.&lt;/p>
+&lt;p>&lt;strong>Middlewares&lt;/strong>&lt;/p>
+&lt;p>MIddlewares are hooks that sit between the Engine and other components . There are two types of middlewares: Spider middlewares and Downloader Middlewares. In this article we will cover Downloader Middlewares, which process requests coming from the Spider and responses coming from the Downloader.&lt;/p>
+&lt;h2 id="spiders-life-cycle">Spiders Life Cycle&lt;/h2>
+&lt;p>Spiders are basically Python classes that define callback functions to be invoked when responses arrive. In addition, Spiders also define a &lt;code>start_requests()&lt;/code> method which defines how to start crawling the site.&lt;/p>
+&lt;p>The life cycle of a Spider is the following:&lt;/p>
+&lt;ol>
+&lt;li>The Engine calls the &lt;code>start_requests()&lt;/code> method which generates the initial Requests to crawl the site. A Request specifies both the URL and the callback function on the Response.&lt;/li>
+&lt;li>Upon receiving the response, the Engine calls the corresponding method of the Spider. If the callback has been left undefined, the &lt;code>parse()&lt;/code> method is called.&lt;/li>
+&lt;li>The result of a callback function can either be an Item or a new Request (which in turn specifies another callback function).&lt;/li>
+&lt;/ol>
+&lt;h2 id="my-approach-to-web-scraping">My approach to web scraping&lt;/h2>
+&lt;p>In general, each website requires a different scraping strategy to extract the data we are interested in. However, there are navigation patterns that are widely shared across websites. In this project, we are interested in scraping reviews from video game journalism websites so the scraping strategy will be very similar in all scenarios. The general approach when scraping such websites is to start requesting the page where all the games reviews are listed. Then, we extract the URL of each review so that we can navigate to the review page. When processing a review, we could be interested in extracting further information about the game being reviewed (like the genre, release date publisher, etc). To do so, we need the URL of the game info page, which is usually found in the review page. As a recap, the process followed when scraping a game reviews site is the following:&lt;/p>
+&lt;ol>
+&lt;li>Extract reviews URLs from the listing page.&lt;/li>
+&lt;li>In the review page, extract relevant information about the review (score, conclusion, positive and negative points, etc) as well as the game info URL.&lt;/li>
+&lt;li>In the game info page, extract information about the game being reviewed.&lt;/li>
+&lt;/ol>
+&lt;p>To take into account this shared navigation pattern, every Spider we create (each spider defines the scraping strategy for a website) will inherit from a Base Spider which defines a template for the scraping process. The code of this Base Spider is the following:&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">BaseSpider&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">name&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="kc">None&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">**&lt;/span>&lt;span class="n">kwargs&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="nb">super&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">BaseSpider&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="fm">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">**&lt;/span>&lt;span class="n">kwargs&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">get_reviews_url&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">raise&lt;/span> &lt;span class="ne">NotImplementedError&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">request_next_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">raise&lt;/span> &lt;span class="ne">NotImplementedError&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">request_review&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">url&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">raise&lt;/span> &lt;span class="ne">NotImplementedError&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">parse&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">urls&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_reviews_url&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">url&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">urls&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="k">yield&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request_review&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">yield&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request_next_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>BaseSpider is an abstract class which defines methods required for the crawling process. The only method that has a concrete implementation is the &lt;code>parse()&lt;/code> method, which is the callback method for requests to the listing page (&lt;code>start_requests()&lt;/code> and &lt;code>request_next_page()&lt;/code> must produce requests to the listing page). One example of spider which inherits from BaseClass is the following:&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">IGNSpider&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">BaseSpider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;ign&amp;#34;&lt;/span>
+&lt;span class="n">allowed_domains&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;es.ign.com&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">start_requests&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s2">&amp;#34;https://es.ign.com/article/review&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">middleware_cls&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">InfiniteScrollIGN&lt;/span>&lt;span class="p">)]&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">get_reviews_url&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">articles&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;//section[@class=&amp;#39;broll wrap&amp;#39;]//article&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">all_urls&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[]&lt;/span>
+&lt;span class="n">all_reviews&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[]&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">article&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">articles&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">article&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;.//h3/a/@href&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="s2">&amp;#34;analisis&amp;#34;&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">url&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">review&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">GameReview&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;url&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">url&lt;/span>
+&lt;span class="n">img&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">article&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;.//div[@class=&amp;#39;t&amp;#39;]/a/img&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">img_srcset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">img&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;@srcset&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">img_srcset&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">img_srcset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">el&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">el&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">img_srcset&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;,&amp;#39;&lt;/span>&lt;span class="p">)]&lt;/span>
+&lt;span class="n">img_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">img_srcset&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39; &amp;#39;&lt;/span>&lt;span class="p">)[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">img_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">img&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;@src&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;img_url&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">img_url&lt;/span>
+&lt;span class="n">review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;title&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">article&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;.//div[@class=&amp;#39;m&amp;#39;]/h3/a/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;description&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">article&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;.//div[@class=&amp;#39;m&amp;#39;]/p/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">all_urls&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">all_reviews&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">review&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">all_urls&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">all_reviews&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">parse_review_1&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">game_review&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">game_reviews&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">sub_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">urlparse&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;/&amp;#39;&lt;/span>&lt;span class="p">)[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;platforms&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">platforms_alias&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">alias&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">alias&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">platforms_alias&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="n">alias&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">sub_url&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">review_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;//div[@class=&amp;#39;review&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">score&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">review_div&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;./figure//span[@class=&amp;#39;side-wrapper side-wrapper hexagon-content&amp;#39;]/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="ow">not&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;platforms&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="ow">and&lt;/span> &lt;span class="n">score&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">game_reviews&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">pop&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;score&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">float&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">review_div&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;./figure//span[@class=&amp;#39;side-wrapper side-wrapper hexagon-content&amp;#39;]/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="o">*&lt;/span> &lt;span class="mi">10&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;text&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//div[@class=&amp;#39;details&amp;#39;]//div[@class=&amp;#39;blurb&amp;#39;]/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;best&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//h3[contains(text(), &amp;#39;Pros&amp;#39;)]/following-sibling::ul/li/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;worst&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//h3[contains(text(), &amp;#39;Contras&amp;#39;)]/following-sibling::ul/li/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">summary_section&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//section[@class=&amp;#39;object-summary embed&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;game_name&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">summary_section&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;.//h2[@class=&amp;#39;object-title&amp;#39;]/a/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">follow_up_url&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">summary_section&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;.//h2[@class=&amp;#39;object-title&amp;#39;]/a/@href&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">release_date_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//div[@class=&amp;#39;article-modified-date&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="ow">not&lt;/span> &lt;span class="n">release_date_div&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">release_date_div&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//div[@class=&amp;#39;article-publish-date&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">release_date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">release_date_div&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;./span/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">release_date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">re&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">search&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="sa">r&lt;/span>&lt;span class="s1">&amp;#39; el (.*?) a las &amp;#39;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">release_date&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">group&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">release_date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">el&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">el&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">release_date&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;de&amp;#39;&lt;/span>&lt;span class="p">)]&lt;/span>
+&lt;span class="n">release_date&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="si">{:02d}&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">format&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="n">month_name&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">index&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">release_date&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">lower&lt;/span>&lt;span class="p">()))&lt;/span>
+&lt;span class="n">release_date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s1">&amp;#39;-&amp;#39;&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">join&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">release_date&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s1">&amp;#39;release_date&amp;#39;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">release_date&lt;/span>
+&lt;span class="k">yield&lt;/span> &lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">follow_up_url&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">middleware_cls&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">DynamicContentMiddleware&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">callback&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">parse_review_2&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">meta&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="nb">dict&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">review_url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">parse_review_2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="n">game_review&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">game_reviews&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">meta&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;review_url&amp;#34;&lt;/span>&lt;span class="p">]]&lt;/span>
+&lt;span class="n">genres&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">xpath&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;//dd[@class=&amp;#39;keyword-genre&amp;#39;]/text()&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">extract_first&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="n">genres&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">genre&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">strip&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">for&lt;/span> &lt;span class="n">genre&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">genres&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;/&amp;#39;&lt;/span>&lt;span class="p">)]&lt;/span>
+&lt;span class="n">game_review&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s2">&amp;#34;genres&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">genres&lt;/span>
+&lt;span class="k">yield&lt;/span> &lt;span class="n">game_review&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">request_review&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">url&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">middleware_cls&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">DynamicContentMiddleware&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">callback&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">parse_review_1&lt;/span>&lt;span class="p">,)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">request_next_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">response&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">scrapy_selenium&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">from_response&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">response&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Notice that to fill all the fields in a review Item we need to make two requests, one to the review page and other to the game info page. The methods &lt;code>parse_review_1()&lt;/code> and &lt;code>parse_review_2()&lt;/code> are the callbacks for each request respectively.&lt;/p>
+&lt;h2 id="scraping-dynamic-websites-with-scrapy-and-selenium">Scraping dynamic websites with Scrapy and Selenium&lt;/h2>
+&lt;p>Scrapy is an awesome tool that gives us a complete framework for developing web crawlers, covering aspects from fetching web pages (Downloader), to extract data (Spiders), to validate and store such data (Item Pipelines). However, there is one situation where Scrapy lacks, and this is scraping dynamic websites. This kind of websites make use of Javascript to render content at the client side, which means that some parts of the HTML are generated after the page is loaded or some user interaction has occurred (like pressing a button or scrolling down). This is a problem for vanilla Scrapy because the Downloader does not do any processing on the response, i.e. it does not execute Javascript code. For scraping such websites we need some tool that allows us to programmatically control a web browser. There are plenty of these tools, but for this project we will use Selenium. To combine Scrapy with Selenium we will make use of Downloader Middlewares.&lt;/p>
+&lt;p>Similar to what we did in the previous section, every Middleware will inherit from a Base Class that defines the process to follow when intercepting Requests. The code for the base class is the following:&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">SeleniumMiddleware&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Scrapy middleware handling the requests using selenium&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Initialize the selenium webdriver
+&lt;/span>&lt;span class="s2">
+&lt;/span>&lt;span class="s2"> Parameters
+&lt;/span>&lt;span class="s2"> ----------
+&lt;/span>&lt;span class="s2"> driver_name: str
+&lt;/span>&lt;span class="s2"> The selenium ``WebDriver`` to use
+&lt;/span>&lt;span class="s2"> driver_arguments: list
+&lt;/span>&lt;span class="s2"> A list of arguments to initialize the driver
+&lt;/span>&lt;span class="s2"> &amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="n">driver_class&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_options_class&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s1">&amp;#39;firefox&amp;#39;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">webdriver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Firefox&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">webdriver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">FirefoxOptions&lt;/span>&lt;span class="p">),&lt;/span>
+&lt;span class="s1">&amp;#39;chrome&amp;#39;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">webdriver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Chrome&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">webdriver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ChromeOptions&lt;/span>&lt;span class="p">)}[&lt;/span>&lt;span class="n">driver_name&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;span class="n">driver_options&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">driver_options_class&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="n">argument&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">driver_options&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add_argument&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">argument&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">driver_class&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="o">**&lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="s1">&amp;#39;&lt;/span>&lt;span class="si">{driver_name}&lt;/span>&lt;span class="s1">_options&amp;#39;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">driver_options&lt;/span>&lt;span class="p">})&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">first_request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="kc">True&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">spider_closed&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Shutdown the driver when spider is closed&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">quit&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">raise&lt;/span> &lt;span class="ne">NotImplementedError&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_page_source&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="nb">str&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">page_source&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Process a request using the selenium driver if applicable&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">middleware_cls&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="vm">__class__&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">response_html&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_page_source&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">first_request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="kc">False&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">HtmlResponse&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">current_url&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">body&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">response_html&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">encoding&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s1">&amp;#39;utf-8&amp;#39;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">request&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">request&lt;/span>
+&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="kc">None&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>In the class constructor, we create an instance of the WebDriver class which allows us to programmatically interact with a browser (in our case, we only consider Firefox and Chrome browsers, but there are other options if needed). When creating a custom Middleware, Scrapy requires us to implement the &lt;code>process_request()&lt;/code> method which will be called by the Engine whenever there is a Request ready to be processed. The output of this method can either be a response or None. If it is the former, the response is automatically processed by the corresponding callback. If it is the latter, the Request is passed to the next Middleware. In our scenario, there will be several Middlewares up and running at the same time (one middleware is necessary for each type of interaction), so we need a way to control which one is going to process the request. To achieve that, we store the target Middleware class in the meta attribute of the Request object, so that each Middleware compares the target class with its own and processes the request if there is a match. The &lt;code>_process_request()&lt;/code> is an abstract method in which each concrete implementation will define the interaction with the browser via the driver instance. Finally, the &lt;code>_page_source()&lt;/code> method returns the HTML generated after the interaction.&lt;/p>
+&lt;p>Next I will present two examples of Middlewares: 1) DynamicContentMiddleware, used to fetch a page whose content dynamically generated after receiving the response; and 2) InfiniteScrollMiddleware, used to navigate a listing page in which the content is generated as the user scrolls down.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">DynamicContentMiddleware&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SeleniumMiddleware&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Scrapy middleware handling the requests using selenium&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">max_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">10.0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">7.0&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="nb">super&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">DynamicContentMiddleware&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="fm">__init__&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">lambda&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">uniform&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">max_delay&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Process a request using the selenium driver if applicable&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="n">delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="nb">print&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="s2">&amp;#34;Waiting &lt;/span>&lt;span class="si">{delay}&lt;/span>&lt;span class="s2"> seconds ...&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">time&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sleep&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">InfiniteScrollIGN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SeleniumMiddleware&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">first_request&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">WebDriverWait&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">10&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">until&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">EC&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">presence_of_all_elements_located&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">By&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">XPATH&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="s2">&amp;#34;//section[@class=&amp;#39;broll wrap&amp;#39;]//article//h3/a&amp;#34;&lt;/span>&lt;span class="p">)))&lt;/span>
+&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;span class="n">previus_pagenum&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">int&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">find_elements&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="n">By&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">XPATH&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;//section[@class=&amp;#39;broll wrap&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)[&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_attribute&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;data-pagenum&amp;#34;&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;span class="n">next_pagenum&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">previus_pagenum&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span>
+&lt;span class="n">anchor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">find_element&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="n">By&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">XPATH&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;//div[@id=&amp;#39;infinitescrollanchor&amp;#39;]&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">execute_script&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;span class="s2">&amp;#34;arguments[0].scrollIntoView(true)&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">anchor&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">WebDriverWait&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">10&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">until&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">EC&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">presence_of_element_located&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">By&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">XPATH&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="s2">&amp;#34;//section[@class=&amp;#39;broll wrap&amp;#39; and @data-pagenum=&amp;#39;&lt;/span>&lt;span class="si">{}&lt;/span>&lt;span class="s2">&amp;#39;]&amp;#34;&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">format&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">next_pagenum&lt;/span>&lt;span class="p">))))&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>The DynamicContentMiddleware is pretty simple: it just waits for a random period of time (to minimize the server load while scraping) and then, it loads the requested URL in the driver instance. On the flip side, the InfiniteScrollMiddleware is more complex as it needs to simulate a user scrolling down.&lt;/p>
+&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>In this post we have created a web scraper to help us keep up to date with the latests games releases. To this end we used Scrapy and Selenium, and we came up with a way for them to play together nicely. We make a great effort architecting the system so that we can extend it to scrap new websites without having to reinvent the wheel. If you got interested in this project, the source code is available on my Github.&lt;/p></description></item><item><title>Chinese Test</title><link>https://example.com/p/test-chinese/</link><pubDate>Wed, 09 Sep 2020 00:00:00 +0000</pubDate><guid>https://example.com/p/test-chinese/</guid><description>&lt;img src="https://example.com/p/test-chinese/helena-hertz-wWZzXlDpMog-unsplash.jpg" alt="Featured image of post Chinese Test" />&lt;h2 id="正文测试">正文测试&lt;/h2>
+&lt;p>而这些并不是完全重要，更加重要的问题是， 带着这些问题，我们来审视一下学生会退会。 既然如何， 对我个人而言，学生会退会不仅仅是一个重大的事件，还可能会改变我的人生。 我们不得不面对一个非常尴尬的事实，那就是， 可是，即使是这样，学生会退会的出现仍然代表了一定的意义。 学生会退会，发生了会如何，不发生又会如何。 经过上述讨论， 生活中，若学生会退会出现了，我们就不得不考虑它出现了的事实。 学生会退会，到底应该如何实现。 这样看来， 在这种困难的抉择下，本人思来想去，寝食难安。 对我个人而言，学生会退会不仅仅是一个重大的事件，还可能会改变我的人生。 就我个人来说，学生会退会对我的意义，不能不说非常重大。 莎士比亚曾经提到过，人的一生是短的，但如果卑劣地过这一生，就太长了。这似乎解答了我的疑惑。 莫扎特说过一句富有哲理的话，谁和我一样用功，谁就会和我一样成功。这启发了我， 对我个人而言，学生会退会不仅仅是一个重大的事件，还可能会改变我的人生。 学生会退会，到底应该如何实现。 一般来说， 从这个角度来看， 这种事实对本人来说意义重大，相信对这个世界也是有一定意义的。 在这种困难的抉择下，本人思来想去，寝食难安。 了解清楚学生会退会到底是一种怎么样的存在，是解决一切问题的关键。 一般来说， 生活中，若学生会退会出现了，我们就不得不考虑它出现了的事实。 问题的关键究竟为何？ 而这些并不是完全重要，更加重要的问题是。&lt;/p>
+&lt;p>奥斯特洛夫斯基曾经说过，共同的事业，共同的斗争，可以使人们产生忍受一切的力量。　带着这句话，我们还要更加慎重的审视这个问题： 一般来讲，我们都必须务必慎重的考虑考虑。 既然如此， 这种事实对本人来说意义重大，相信对这个世界也是有一定意义的。 带着这些问题，我们来审视一下学生会退会。 我认为， 我认为， 在这种困难的抉择下，本人思来想去，寝食难安。 问题的关键究竟为何？ 每个人都不得不面对这些问题。 在面对这种问题时， 要想清楚，学生会退会，到底是一种怎么样的存在。 我认为， 既然如此， 每个人都不得不面对这些问题。 在面对这种问题时， 那么， 我认为， 学生会退会因何而发生。&lt;/p>
+&lt;h2 id="引用">引用&lt;/h2>
+&lt;blockquote>
+&lt;p>思念是最暖的忧伤像一双翅膀&lt;br>
+让我停不了飞不远在过往游荡&lt;br>
+不告而别的你 就算为了我着想&lt;br>
+这么沉痛的呵护 我怎么能翱翔&lt;/p>
+&lt;p>&lt;em>&lt;a class="link" href="https://www.youtube.com/watch?v=3aypp_YlBzI" target="_blank" rel="noopener"
+>最暖的憂傷 - 田馥甄&lt;/a>&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;h2 id="图片">图片&lt;/h2>
+&lt;p>&lt;figure style="flex-grow: 66; flex-basis: 160px">
+&lt;a href="https://example.com/p/test-chinese/florian-klauer-nptLmg6jqDo-unsplash.jpg" data-size="667x1000">&lt;img src="https://example.com/p/test-chinese/florian-klauer-nptLmg6jqDo-unsplash.jpg"
+srcset="https://example.com/p/test-chinese/florian-klauer-nptLmg6jqDo-unsplash_hu595aaf3b3dbbb41af5aed8d3958cc9f9_13854_480x0_resize_q75_box.jpg 480w, https://example.com/p/test-chinese/florian-klauer-nptLmg6jqDo-unsplash_hu595aaf3b3dbbb41af5aed8d3958cc9f9_13854_1024x0_resize_q75_box.jpg 1024w"
+width="667"
+height="1000"
+loading="lazy"
+alt="Photo by Florian Klauer on Unsplash">
+&lt;/a>
+&lt;figcaption>Photo by Florian Klauer on Unsplash&lt;/figcaption>
+&lt;/figure> &lt;figure style="flex-grow: 149; flex-basis: 359px">
+&lt;a href="https://example.com/p/test-chinese/luca-bravo-alS7ewQ41M8-unsplash.jpg" data-size="1000x667">&lt;img src="https://example.com/p/test-chinese/luca-bravo-alS7ewQ41M8-unsplash.jpg"
+srcset="https://example.com/p/test-chinese/luca-bravo-alS7ewQ41M8-unsplash_hu0a3f1163de68d0b9471979ebf0ecf11e_32400_480x0_resize_q75_box.jpg 480w, https://example.com/p/test-chinese/luca-bravo-alS7ewQ41M8-unsplash_hu0a3f1163de68d0b9471979ebf0ecf11e_32400_1024x0_resize_q75_box.jpg 1024w"
+width="1000"
+height="667"
+loading="lazy"
+alt="Photo by Luca Bravo on Unsplash">
+&lt;/a>
+&lt;figcaption>Photo by Luca Bravo on Unsplash&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>&lt;figure style="flex-grow: 133; flex-basis: 320px">
+&lt;a href="https://example.com/p/test-chinese/helena-hertz-wWZzXlDpMog-unsplash.jpg" data-size="1000x750">&lt;img src="https://example.com/p/test-chinese/helena-hertz-wWZzXlDpMog-unsplash.jpg"
+srcset="https://example.com/p/test-chinese/helena-hertz-wWZzXlDpMog-unsplash_hu45a5e3ad5e058da6a00650ed8fd40bea_15530_480x0_resize_q75_box.jpg 480w, https://example.com/p/test-chinese/helena-hertz-wWZzXlDpMog-unsplash_hu45a5e3ad5e058da6a00650ed8fd40bea_15530_1024x0_resize_q75_box.jpg 1024w"
+width="1000"
+height="750"
+loading="lazy"
+alt="Photo by Helena Hertz on Unsplash">
+&lt;/a>
+&lt;figcaption>Photo by Helena Hertz on Unsplash&lt;/figcaption>
+&lt;/figure> &lt;figure style="flex-grow: 66; flex-basis: 160px">
+&lt;a href="https://example.com/p/test-chinese/hudai-gayiran-3Od_VKcDEAA-unsplash.jpg" data-size="667x1000">&lt;img src="https://example.com/p/test-chinese/hudai-gayiran-3Od_VKcDEAA-unsplash.jpg"
+srcset="https://example.com/p/test-chinese/hudai-gayiran-3Od_VKcDEAA-unsplash_hub241c2a9c7a2caf7e16a2a5bbc7141ff_18711_480x0_resize_q75_box.jpg 480w, https://example.com/p/test-chinese/hudai-gayiran-3Od_VKcDEAA-unsplash_hub241c2a9c7a2caf7e16a2a5bbc7141ff_18711_1024x0_resize_q75_box.jpg 1024w"
+width="667"
+height="1000"
+loading="lazy"
+alt="Photo by Hudai Gayiran on Unsplash">
+&lt;/a>
+&lt;figcaption>Photo by Hudai Gayiran on Unsplash&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-markdown" data-lang="markdown">![&lt;span class="nt">Photo by Florian Klauer on Unsplash&lt;/span>](&lt;span class="na">florian-klauer-nptLmg6jqDo-unsplash.jpg&lt;/span>) ![&lt;span class="nt">Photo by Luca Bravo on Unsplash&lt;/span>](&lt;span class="na">luca-bravo-alS7ewQ41M8-unsplash.jpg&lt;/span>)
+![&lt;span class="nt">Photo by Helena Hertz on Unsplash&lt;/span>](&lt;span class="na">helena-hertz-wWZzXlDpMog-unsplash.jpg&lt;/span>) ![&lt;span class="nt">Photo by Hudai Gayiran on Unsplash&lt;/span>](&lt;span class="na">hudai-gayiran-3Od_VKcDEAA-unsplash.jpg&lt;/span>)
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>相册语法来自 &lt;a class="link" href="https://typlog.com/" target="_blank" rel="noopener"
+>Typlog&lt;/a>&lt;/p></description></item><item><title>Markdown Syntax Guide</title><link>https://example.com/p/markdown-syntax-guide/</link><pubDate>Mon, 11 Mar 2019 00:00:00 +0000</pubDate><guid>https://example.com/p/markdown-syntax-guide/</guid><description>&lt;img src="https://example.com/p/markdown-syntax-guide/pawel-czerwinski-8uZPynIu-rQ-unsplash.jpg" alt="Featured image of post Markdown Syntax Guide" />&lt;p>This article offers a sample of basic Markdown syntax that can be used in Hugo content files, also it shows whether basic HTML elements are decorated with CSS in a Hugo theme.&lt;/p>
+&lt;h2 id="headings">Headings&lt;/h2>
+&lt;p>The following HTML &lt;code>&amp;lt;h1&amp;gt;&lt;/code>—&lt;code>&amp;lt;h6&amp;gt;&lt;/code> elements represent six levels of section headings. &lt;code>&amp;lt;h1&amp;gt;&lt;/code> is the highest section level while &lt;code>&amp;lt;h6&amp;gt;&lt;/code> is the lowest.&lt;/p>
+&lt;h1 id="h1">H1&lt;/h1>
+&lt;h2 id="h2">H2&lt;/h2>
+&lt;h3 id="h3">H3&lt;/h3>
+&lt;h4 id="h4">H4&lt;/h4>
+&lt;h5 id="h5">H5&lt;/h5>
+&lt;h6 id="h6">H6&lt;/h6>
+&lt;h2 id="paragraph">Paragraph&lt;/h2>
+&lt;p>Xerum, quo qui aut unt expliquam qui dolut labo. Aque venitatiusda cum, voluptionse latur sitiae dolessi aut parist aut dollo enim qui voluptate ma dolestendit peritin re plis aut quas inctum laceat est volestemque commosa as cus endigna tectur, offic to cor sequas etum rerum idem sintibus eiur? Quianimin porecus evelectur, cum que nis nust voloribus ratem aut omnimi, sitatur? Quiatem. Nam, omnis sum am facea corem alique molestrunt et eos evelece arcillit ut aut eos eos nus, sin conecerem erum fuga. Ri oditatquam, ad quibus unda veliamenimin cusam et facea ipsamus es exerum sitate dolores editium rerore eost, temped molorro ratiae volorro te reribus dolorer sperchicium faceata tiustia prat.&lt;/p>
+&lt;p>Itatur? Quiatae cullecum rem ent aut odis in re eossequodi nonsequ idebis ne sapicia is sinveli squiatum, core et que aut hariosam ex eat.&lt;/p>
+&lt;h2 id="blockquotes">Blockquotes&lt;/h2>
+&lt;p>The blockquote element represents content that is quoted from another source, optionally with a citation which must be within a &lt;code>footer&lt;/code> or &lt;code>cite&lt;/code> element, and optionally with in-line changes such as annotations and abbreviations.&lt;/p>
+&lt;h4 id="blockquote-without-attribution">Blockquote without attribution&lt;/h4>
+&lt;blockquote>
+&lt;p>Tiam, ad mint andaepu dandae nostion secatur sequo quae.
+&lt;strong>Note&lt;/strong> that you can use &lt;em>Markdown syntax&lt;/em> within a blockquote.&lt;/p>
+&lt;/blockquote>
+&lt;h4 id="blockquote-with-attribution">Blockquote with attribution&lt;/h4>
+&lt;blockquote>
+&lt;p>Don&amp;rsquo;t communicate by sharing memory, share memory by communicating.&lt;!-- raw HTML omitted -->
+— &lt;!-- raw HTML omitted -->Rob Pike&lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>&lt;!-- raw HTML omitted -->&lt;/p>
+&lt;/blockquote>
+&lt;h2 id="tables">Tables&lt;/h2>
+&lt;p>Tables aren&amp;rsquo;t part of the core Markdown spec, but Hugo supports supports them out-of-the-box.&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Name&lt;/th>
+&lt;th>Age&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>Bob&lt;/td>
+&lt;td>27&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Alice&lt;/td>
+&lt;td>23&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;h4 id="inline-markdown-within-tables">Inline Markdown within tables&lt;/h4>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Italics&lt;/th>
+&lt;th>Bold&lt;/th>
+&lt;th>Code&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>&lt;em>italics&lt;/em>&lt;/td>
+&lt;td>&lt;strong>bold&lt;/strong>&lt;/td>
+&lt;td>&lt;code>code&lt;/code>&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;h2 id="code-blocks">Code Blocks&lt;/h2>
+&lt;h4 id="code-block-with-backticks">Code block with backticks&lt;/h4>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">DynamicContentMiddleware&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SeleniumMiddleware&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">max_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">10.0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">7.0&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="nb">super&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">DynamicContentMiddleware&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="fm">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">lambda&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">uniform&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">max_delay&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Process a request using the selenium driver if applicable&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="n">delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="nb">print&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="s2">&amp;#34;Waiting &lt;/span>&lt;span class="si">{delay}&lt;/span>&lt;span class="s2"> seconds ...&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">time&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sleep&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_page_source&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="nb">str&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">page_source&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h4 id="code-block-indented-with-four-spaces">Code block indented with four spaces&lt;/h4>
+&lt;pre>&lt;code>&amp;lt;!doctype html&amp;gt;
+&amp;lt;html lang=&amp;quot;en&amp;quot;&amp;gt;
+&amp;lt;head&amp;gt;
+&amp;lt;meta charset=&amp;quot;utf-8&amp;quot;&amp;gt;
+&amp;lt;title&amp;gt;Example HTML5 Document&amp;lt;/title&amp;gt;
+&amp;lt;/head&amp;gt;
+&amp;lt;body&amp;gt;
+&amp;lt;p&amp;gt;Test&amp;lt;/p&amp;gt;
+&amp;lt;/body&amp;gt;
+&amp;lt;/html&amp;gt;
+&lt;/code>&lt;/pre>
+&lt;h4 id="code-block-with-hugos-internal-highlight-shortcode">Code block with Hugo&amp;rsquo;s internal highlight shortcode&lt;/h4>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-python3" data-lang="python3">&lt;span class="k">class&lt;/span> &lt;span class="nc">DynamicContentMiddleware&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SeleniumMiddleware&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">max_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">10.0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mf">7.0&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="nb">super&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">DynamicContentMiddleware&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="fm">__init__&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">driver_name&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">driver_arguments&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">lambda&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">uniform&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">max_delay&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_process_request&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">request&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">spider&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;Process a request using the selenium driver if applicable&amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="n">delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get_delay&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;span class="nb">print&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="s2">&amp;#34;Waiting &lt;/span>&lt;span class="si">{delay}&lt;/span>&lt;span class="s2"> seconds ...&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">time&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sleep&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">delay&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">get&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">def&lt;/span> &lt;span class="nf">_page_source&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="p">,):&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="nb">str&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="bp">self&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">driver&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">page_source&lt;/span>&lt;span class="p">)&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;h2 id="list-types">List Types&lt;/h2>
+&lt;h4 id="ordered-list">Ordered List&lt;/h4>
+&lt;ol>
+&lt;li>First item&lt;/li>
+&lt;li>Second item&lt;/li>
+&lt;li>Third item&lt;/li>
+&lt;/ol>
+&lt;h4 id="unordered-list">Unordered List&lt;/h4>
+&lt;ul>
+&lt;li>List item&lt;/li>
+&lt;li>Another item&lt;/li>
+&lt;li>And another item&lt;/li>
+&lt;/ul>
+&lt;h4 id="nested-list">Nested list&lt;/h4>
+&lt;ul>
+&lt;li>Fruit
+&lt;ul>
+&lt;li>Apple&lt;/li>
+&lt;li>Orange&lt;/li>
+&lt;li>Banana&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Dairy
+&lt;ul>
+&lt;li>Milk&lt;/li>
+&lt;li>Cheese&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;h2 id="other-elements--abbr-sub-sup-kbd-mark">Other Elements — abbr, sub, sup, kbd, mark&lt;/h2>
+&lt;p>&lt;!-- raw HTML omitted -->GIF&lt;!-- raw HTML omitted --> is a bitmap image format.&lt;/p>
+&lt;p>H&lt;!-- raw HTML omitted -->2&lt;!-- raw HTML omitted -->O&lt;/p>
+&lt;p>X&lt;!-- raw HTML omitted -->n&lt;!-- raw HTML omitted --> + Y&lt;!-- raw HTML omitted -->n&lt;!-- raw HTML omitted --> = Z&lt;!-- raw HTML omitted -->n&lt;!-- raw HTML omitted -->&lt;/p>
+&lt;p>Press &lt;!-- raw HTML omitted -->&lt;!-- raw HTML omitted -->CTRL&lt;!-- raw HTML omitted -->+&lt;!-- raw HTML omitted -->ALT&lt;!-- raw HTML omitted -->+&lt;!-- raw HTML omitted -->Delete&lt;!-- raw HTML omitted -->&lt;!-- raw HTML omitted --> to end the session.&lt;/p>
+&lt;p>Most &lt;!-- raw HTML omitted -->salamanders&lt;!-- raw HTML omitted --> are nocturnal, and hunt for insects, worms, and other small creatures.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>The above quote is excerpted from Rob Pike&amp;rsquo;s &lt;a class="link" href="https://www.youtube.com/watch?v=PAAkCSZUG1c" target="_blank" rel="noopener"
+>talk&lt;/a> during Gopherfest, November 18, 2015. &lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Rich Content</title><link>https://example.com/p/rich-content/</link><pubDate>Sun, 10 Mar 2019 00:00:00 +0000</pubDate><guid>https://example.com/p/rich-content/</guid><description>&lt;p>Hugo ships with several &lt;a class="link" href="https://gohugo.io/content-management/shortcodes/#use-hugo-s-built-in-shortcodes" target="_blank" rel="noopener"
+>Built-in Shortcodes&lt;/a> for rich content, along with a &lt;a class="link" href="https://gohugo.io/about/hugo-and-gdpr/" target="_blank" rel="noopener"
+>Privacy Config&lt;/a> and a set of Simple Shortcodes that enable static and no-JS versions of various social media embeds.&lt;/p>
+&lt;hr>
+&lt;h2 id="youtube-privacy-enhanced-shortcode">YouTube Privacy Enhanced Shortcode&lt;/h2>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe loading="lazy" src="https://www.youtube.com/embed/ZJthWmvUzzc" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;!-- raw HTML omitted -->
+&lt;hr>
+&lt;h2 id="twitter-simple-shortcode">Twitter Simple Shortcode&lt;/h2>
+&lt;style type="text/css">
+.twitter-tweet {
+font: 14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+border-left: 4px solid #2b7bb9;
+padding-left: 1.5em;
+color: #555;
+}
+.twitter-tweet a {
+color: #2b7bb9;
+text-decoration: none;
+}
+blockquote.twitter-tweet a:hover,
+blockquote.twitter-tweet a:focus {
+text-decoration: underline;
+}
+&lt;/style>
+&lt;blockquote class="twitter-tweet">&lt;p lang="en" dir="ltr">“In addition to being more logical, asymmetry has the advantage that its complete appearance is far more optically effective than symmetry.”&lt;br>— Jan Tschichold &lt;a href="https://t.co/gcv7SrhvJb">pic.twitter.com/gcv7SrhvJb&lt;/a>&lt;/p>&amp;mdash; Graphic Design History (@DesignReviewed) &lt;a href="https://twitter.com/DesignReviewed/status/1085870671291310081?ref_src=twsrc%5Etfw">January 17, 2019&lt;/a>&lt;/blockquote>
+&lt;!-- raw HTML omitted -->
+&lt;hr>
+&lt;h2 id="vimeo-simple-shortcode">Vimeo Simple Shortcode&lt;/h2>
+&lt;style>
+.__h_video {
+position: relative;
+padding-bottom: 56.23%;
+height: 0;
+overflow: hidden;
+width: 100%;
+background: #000;
+}
+.__h_video img {
+width: 100%;
+height: auto;
+color: #000;
+}
+.__h_video .play {
+height: 72px;
+width: 72px;
+left: 50%;
+top: 50%;
+margin-left: -36px;
+margin-top: -36px;
+position: absolute;
+cursor: pointer;
+}
+&lt;/style>
+&lt;div class="s_video_simple __h_video">
+&lt;a href="https://vimeo.com/4.8912912e&amp;#43;07" rel="noopener" target="_blank">
+&lt;img src="https://i.vimeocdn.com/video/337401969_640.jpg" srcset="https://i.vimeocdn.com/video/337401969_640.jpg 1x, https://i.vimeocdn.com/video/337401969.jpg 2x" alt="Sing Jan Swing - Kinetic Type">
+&lt;div class="play">&lt;svg version="1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 61 61">&lt;circle cx="30.5" cy="30.5" r="30.5" opacity=".8" fill="#000">&lt;/circle>&lt;path d="M25.3 19.2c-2.1-1.2-3.8-.2-3.8 2.2v18.1c0 2.4 1.7 3.4 3.8 2.2l16.6-9.1c2.1-1.2 2.1-3.2 0-4.4l-16.6-9z" fill="#fff">&lt;/path>&lt;/svg>&lt;/div>&lt;/a>&lt;/div></description></item><item><title>Emoji Support</title><link>https://example.com/p/emoji-support/</link><pubDate>Tue, 05 Mar 2019 00:00:00 +0000</pubDate><guid>https://example.com/p/emoji-support/</guid><description>&lt;img src="https://example.com/p/emoji-support/the-creative-exchange-d2zvqp3fpro-unsplash.jpg" alt="Featured image of post Emoji Support" />&lt;p>Emoji can be enabled in a Hugo project in a number of ways.&lt;/p>
+&lt;p>The &lt;a class="link" href="https://gohugo.io/functions/emojify/" target="_blank" rel="noopener"
+>&lt;code>emojify&lt;/code>&lt;/a> function can be called directly in templates or &lt;a class="link" href="https://gohugo.io/templates/shortcode-templates/#inline-shortcodes" target="_blank" rel="noopener"
+>Inline Shortcodes&lt;/a>.&lt;/p>
+&lt;p>To enable emoji globally, set &lt;code>enableEmoji&lt;/code> to &lt;code>true&lt;/code> in your site&amp;rsquo;s &lt;a class="link" href="https://gohugo.io/getting-started/configuration/" target="_blank" rel="noopener"
+>configuration&lt;/a> and then you can type emoji shorthand codes directly in content files; e.g.&lt;/p>
+&lt;!-- raw HTML omitted -->
+&lt;p>The &lt;a class="link" href="http://www.emoji-cheat-sheet.com/" target="_blank" rel="noopener"
+>Emoji cheat sheet&lt;/a> is a useful reference for emoji shorthand codes.&lt;/p>
+&lt;hr>
+&lt;p>&lt;strong>N.B.&lt;/strong> The above steps enable Unicode Standard emoji characters and sequences in Hugo, however the rendering of these glyphs depends on the browser and the platform. To style the emoji you can either use a third party emoji font or a font stack; e.g.&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-html" data-lang="html">.emoji {
+font-family: Apple Color Emoji, Segoe UI Emoji, NotoColorEmoji, Segoe UI Symbol, Android Emoji, EmojiSymbols;
+}&lt;/code>&lt;/pre>&lt;/div></description></item></channel></rss>
