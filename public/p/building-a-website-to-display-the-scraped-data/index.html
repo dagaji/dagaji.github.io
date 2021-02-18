@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en-us">
+    <head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'><meta name='description' content='Project Description Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.
+There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice.'><title>Building a website to display the scraped data</title>
+
+<link rel='canonical' href='https://example.com/p/building-a-website-to-display-the-scraped-data/'>
+
+<link rel="stylesheet" href="/scss/style.min.css"><meta property='og:title' content='Building a website to display the scraped data'>
+<meta property='og:description' content='Project Description Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.
+There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice.'>
+<meta property='og:url' content='https://example.com/p/building-a-website-to-display-the-scraped-data/'>
+<meta property='og:site_name' content='David Gallardo'>
+<meta property='og:type' content='article'><meta property='article:section' content='Post' /><meta property='article:tag' content='python' /><meta property='article:tag' content='flask' /><meta property='article:tag' content='mongodb' /><meta property='article:tag' content='javascript' /><meta property='article:published_time' content='2021-02-16T00:00:00&#43;00:00'/><meta property='article:modified_time' content='2021-02-16T00:00:00&#43;00:00'/><meta property='og:image' content='https://example.com/p/building-a-website-to-display-the-scraped-data/flask_logo.svg' />
+<meta name="twitter:title" content="Building a website to display the scraped data">
+<meta name="twitter:description" content="Project Description Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.
+There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice."><meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content='https://example.com/p/building-a-website-to-display-the-scraped-data/flask_logo.svg' /><style>
+    p {
+        text-align: justify;
+    }
+</style>
+    </head>
+    <body class="">
+    <script>
+        (function() {
+            const colorSchemeKey = 'StackColorScheme';
+            if(!localStorage.getItem(colorSchemeKey)){
+                localStorage.setItem(colorSchemeKey, "auto");
+            }
+        })();
+    </script><script>
+    (function() {
+        const colorSchemeKey = 'StackColorScheme';
+        const colorSchemeItem = localStorage.getItem(colorSchemeKey);
+        const supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
+
+        if (colorSchemeItem == 'dark' || colorSchemeItem === 'auto' && supportDarkMode) {
+            
+
+            document.body.dataset.scheme = 'dark';
+        } else {
+            document.body.dataset.scheme = 'light';
+        }
+    })();
+</script><div class="container main-container flex on-phone--column extended article-page with-toolbar">
+            <aside class="sidebar left-sidebar sticky">
+    <button class="hamburger hamburger--spin" type="button" id="toggle-menu" aria-label="Toggle Menu">
+        <span class="hamburger-box">
+            <span class="hamburger-inner"></span>
+        </span>
+    </button>
+
+    <header class="site-info">
+        
+            <figure class="site-avatar">
+                
+                    
+                    
+                    
+                        
+                        <img src="/img/me2_hu5f40357314d1dfd51219698c2b5180b1_36591_300x0_resize_box_2.png" width="300"
+                            height="302" class="site-logo" loading="lazy" alt="Avatar">
+                    
+                
+
+                
+            </figure>
+        
+        <h1 class="site-name"><a href="https://example.com">David Gallardo</a></h1>
+        <h2 class="site-description">Software Engineer</h2>
+    </header>
+
+    <ol class="menu" id="main-menu">
+        
+        
+        
+
+        <li >
+            <a href='/'>
+                
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <polyline points="5 12 3 12 12 3 21 12 19 12" />
+  <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
+  <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" />
+</svg>
+
+
+
+                
+                <span>Home</span>
+            </a>
+        </li>
+        
+        
+
+        <li >
+            <a href='/about'>
+                
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-user" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <circle cx="12" cy="7" r="4" />
+  <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+</svg>
+
+
+
+                
+                <span>About</span>
+            </a>
+        </li>
+        
+
+        
+            <li id="dark-mode-toggle">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <circle cx="8" cy="12" r="2" />
+  <rect x="2" y="6" width="20" height="12" rx="6" />
+</svg>
+
+
+
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <circle cx="16" cy="12" r="2" />
+  <rect x="2" y="6" width="20" height="12" rx="6" />
+</svg>
+
+
+
+                <span>Dark Mode</span>
+            </li>
+        
+    </ol>
+</aside>
+
+            <main class="main full-width">
+    <div id="article-toolbar">
+        <a href="https://example.com" class="back-home">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-chevron-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <polyline points="15 6 9 12 15 18" />
+</svg>
+
+
+
+            <span>Back</span>
+        </a>
+    </div>
+
+    <article class="has-image main-article">
+    <header class="article-header">
+        <div class="article-image">
+            <a href="/p/building-a-website-to-display-the-scraped-data/">
+                
+                    <img src="/p/building-a-website-to-display-the-scraped-data/flask_logo.svg" loading="lazy" alt="Featured image of post Building a website to display the scraped data" />
+                
+            </a>
+        </div>
+    
+
+    <div class="article-details">
+    
+    <header class="article-category">
+        
+            <a href="/categories/web-development/" >
+                web development
+            </a>
+        
+            <a href="/categories/games-reviews/" >
+                games reviews
+            </a>
+        
+    </header>
+    
+
+    <h2 class="article-title">
+        <a href="/p/building-a-website-to-display-the-scraped-data/">Building a website to display the scraped data</a>
+    </h2>
+
+    <footer class="article-time">
+        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <circle cx="12" cy="12" r="9" />
+  <polyline points="12 7 12 12 15 15" />
+</svg>
+
+
+
+        <time class="article-time--published">Feb 16, 2021</time>
+    </footer></div>
+</header>
+
+    <section class="article-content">
+    <h2 id="project-description">Project Description</h2>
+<p>Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.</p>
+<p>There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice. As for the interaction with MongoDB, we are already familiar with pymongo, as we used it before to store the scraped data into the collection, so we will use it again. Finally, in the front-end, we will make use of AJAX to implement some sort of pagination on the results without having to reload the page.</p>
+<p>Before we get to work, I will show you a screenshot of the final webpage for you to get an idea of the intended result :</p>
+<p><figure style="flex-grow: 113; flex-basis: 272px">
+		<a href="/p/building-a-website-to-display-the-scraped-data/screenshot2.png" data-size="800x704"><img src="/p/building-a-website-to-display-the-scraped-data/screenshot2.png"
+				srcset="/p/building-a-website-to-display-the-scraped-data/screenshot2_hu96b59ee46ae172efcb00271080e38eae_212919_480x0_resize_box_2.png 480w, /p/building-a-website-to-display-the-scraped-data/screenshot2_hu96b59ee46ae172efcb00271080e38eae_212919_1024x0_resize_box_2.png 1024w"
+				width="800"
+				height="704"
+				loading="lazy"
+				alt="Screenshot">
+		</a>
+		
+		<figcaption>Screenshot</figcaption>
+		
+	</figure></p>
+<p>As you can see our website allows to make the following queries:</p>
+<ul>
+<li>Filter reviews by genre, platform, reviewer and posted date.</li>
+<li>Search reviews by game name.</li>
+<li>Sort the displayed results either by score or posted date.</li>
+</ul>
+<h2 id="mongodb-queries">MongoDB queries</h2>
+<p>There will be two types of queries in our application: 1) search by name queries; and 2) filter queries. The latter ones have two types of conditions: equality conditions (using the $and operator if more than one condition on the same field) and range conditions (using $gt and/or $lt). Also in the latter case, it is possible to sort the results either by posted date or score of the review.</p>
+<div class="highlight"><pre class="chroma"><code class="language-python3" data-lang="python3">
+<span class="k">def</span> <span class="nf">_process_result</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+    <span class="n">result</span><span class="p">[</span><span class="s2">&#34;genre&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;, &#34;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&#34;genre&#34;</span><span class="p">])</span>
+    <span class="n">result</span><span class="p">[</span><span class="s2">&#34;platforms&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&#34;, &#34;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&#34;platforms&#34;</span><span class="p">])</span>
+    <span class="n">result</span><span class="p">[</span><span class="s2">&#34;release_date&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&#34;release_date&#34;</span><span class="p">])</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">result</span><span class="p">[</span><span class="s2">&#34;score&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&#34;score&#34;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span> <span class="nf">list_reviews</span><span class="p">(</span><span class="n">collection</span><span class="p">,</span> <span class="n">filter_dict</span><span class="p">,</span> <span class="n">sort_by</span><span class="o">=</span><span class="s2">&#34;release_date&#34;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">page_size</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">filter_dict</span><span class="p">)</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">sort_by</span><span class="p">,</span> <span class="n">pymongo</span><span class="o">.</span><span class="n">DESCENDING</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">offset</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">page_size</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">_process_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">]</span>
+    <span class="n">has_next</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">page_size</span>
+    <span class="k">if</span> <span class="n">has_next</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">has_next</span>
+    <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">has_next</span>
+
+
+<span class="k">def</span> <span class="nf">search_by_name</span><span class="p">(</span><span class="n">collection</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">max_number_results</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&#34;game_name&#34;</span><span class="p">:{</span><span class="s2">&#34;$regex&#34;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&#34;$options&#34;</span><span class="p">:</span> <span class="s1">&#39;i&#39;</span><span class="p">}}</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">query</span><span class="p">)</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">max_number_results</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">_process_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">build_query</span><span class="p">(</span><span class="n">eq_filters</span><span class="p">,</span> <span class="n">range_filters</span><span class="p">):</span>
+    <span class="n">filter_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">and_cond</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">eq_conds</span> <span class="ow">in</span> <span class="n">eq_filters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">eq_conds</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">filter_dict</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">eq_conds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">and_cond</span> <span class="o">+=</span> <span class="p">[{</span><span class="n">field</span><span class="p">:</span><span class="n">value</span><span class="p">}</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">eq_conds</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">and_cond</span><span class="p">:</span>
+        <span class="n">filter_dict</span><span class="p">[</span><span class="s2">&#34;$and&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="n">and_cond</span>
+    
+    <span class="k">for</span> <span class="n">range_field</span><span class="p">,</span> <span class="p">(</span><span class="n">inf_limit</span><span class="p">,</span> <span class="n">sup_limit</span><span class="p">)</span> <span class="ow">in</span> <span class="n">range_filters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">_range_filter</span> <span class="o">=</span> <span class="p">{</span><span class="n">range_field</span><span class="p">:</span> <span class="p">{}}</span>
+        <span class="k">if</span> <span class="n">inf_limit</span><span class="p">:</span>
+            <span class="n">_range_filter</span><span class="p">[</span><span class="n">range_field</span><span class="p">][</span><span class="s2">&#34;$gt&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="n">inf_limit</span>
+        <span class="k">if</span> <span class="n">sup_limit</span><span class="p">:</span>
+            <span class="n">_range_filter</span><span class="p">[</span><span class="n">range_field</span><span class="p">][</span><span class="s2">&#34;$lt&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sup_limit</span>
+        <span class="k">if</span> <span class="n">_range_filter</span><span class="p">[</span><span class="n">range_field</span><span class="p">]:</span>
+            <span class="n">filter_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_range_filter</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">filter_dict</span>
+</code></pre></div><p>Note that we request page_size+1 elements in <code>list_reviews()</code> so that we can check if there are more than PAGE_SIZE matches. This will be useful later on, when we implement the pagination of results.</p>
+<h2 id="flask-routing-and-jinja-templates">Flask Routing and Jinja Templates</h2>
+<p>There will be only two URLs (or routes) in our application: 1) “/index” (or just “/”) used by the end user to access the webpage in the browser; and 2) “/list” used by the JavaScript code to request  results by means of AJAX.</p>
+<p>The view function associated with the first route is really simple as it just renders a Jinja Template. This template is what actually does all the heavy lifting here, so we will focus on it.</p>
+<div class="highlight"><pre class="chroma"><code class="language-html" data-lang="html">{% macro display_options(opts_name, opts_type, items, type) -%}
+
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;dropdown pull-left&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">button</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;btn btn-default dropdown-toggle&#34;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;button&#34;</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;dropdownMenu1&#34;</span> <span class="na">data-toggle</span><span class="o">=</span><span class="s">&#34;dropdown&#34;</span>
+    <span class="na">aria-haspopup</span><span class="o">=</span><span class="s">&#34;true&#34;</span> <span class="na">aria-expanded</span><span class="o">=</span><span class="s">&#34;true&#34;</span> <span class="na">name</span><span class="o">=</span><span class="s">&#34;{{opts_type}}&#34;</span><span class="p">&gt;</span>
+    {{opts_name}}
+    <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;caret&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">ul</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;dropdown-menu checkbox-menu allow-focus&#34;</span> <span class="na">aria-labelledby</span><span class="o">=</span><span class="s">&#34;dropdownMenu1&#34;</span><span class="p">&gt;</span>
+    {% for value in items %}
+    <span class="p">&lt;</span><span class="nt">li</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">label</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">input</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;{{type}}&#34;</span> <span class="na">autocomplete</span><span class="o">=</span><span class="s">&#34;off&#34;</span> <span class="na">name</span><span class="o">=</span><span class="s">&#34;{{value}}&#34;</span><span class="p">&gt;</span> {{value}}
+      <span class="p">&lt;/</span><span class="nt">label</span><span class="p">&gt;</span>
+    <span class="p">&lt;/</span><span class="nt">li</span><span class="p">&gt;</span>
+    {% endfor %}
+  <span class="p">&lt;/</span><span class="nt">ul</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+
+{%- endmacro %}
+
+<span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;</span>
+
+<span class="p">&lt;</span><span class="nt">head</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>Game Reviews<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">&#34;utf-8&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">http-equiv</span><span class="o">=</span><span class="s">&#34;X-UA-Compatible&#34;</span> <span class="na">content</span><span class="o">=</span><span class="s">&#34;IE=edge&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">name</span><span class="o">=</span><span class="s">&#34;viewport&#34;</span> <span class="na">content</span><span class="o">=</span><span class="s">&#34;width=device-width, initial-scale=1&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">link</span> <span class="na">rel</span><span class="o">=</span><span class="s">&#34;stylesheet&#34;</span> <span class="na">href</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;css/bootstrap.min.css&#39;) }}&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">link</span> <span class="na">rel</span><span class="o">=</span><span class="s">&#34;stylesheet&#34;</span> <span class="na">href</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;css/styles.css&#39;) }}&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">link</span> <span class="na">href</span><span class="o">=</span><span class="s">&#39;https://fonts.googleapis.com/css?family=Oxygen:400,300,700&#39;</span> <span class="na">rel</span><span class="o">=</span><span class="s">&#39;stylesheet&#39;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#39;text/css&#39;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">link</span> <span class="na">href</span><span class="o">=</span><span class="s">&#39;https://fonts.googleapis.com/css?family=Lora&#39;</span> <span class="na">rel</span><span class="o">=</span><span class="s">&#39;stylesheet&#39;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#39;text/css&#39;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">script</span><span class="p">&gt;</span>
+    <span class="kr">const</span> <span class="nx">request_params</span> <span class="o">=</span> <span class="p">{{</span> <span class="nx">request</span><span class="p">.</span><span class="nx">args</span><span class="o">|</span> <span class="nx">tojson</span> <span class="o">|</span> <span class="nx">safe</span><span class="p">}};</span>
+    <span class="kr">const</span> <span class="nx">request_url</span> <span class="o">=</span> <span class="s2">&#34;{{ url_for(&#39;list_reviews&#39;) }}&#34;</span><span class="p">;</span>
+  <span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;js/ajax-utils.js&#39;) }}&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;js/jquery-2.1.4.min.js&#39;) }}&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;js/bootstrap.min.js&#39;) }}&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&#34;{{ url_for(&#39;static&#39;, filename=&#39;js/script.js&#39;) }}&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+
+<span class="p">&lt;/</span><span class="nt">head</span><span class="p">&gt;</span>
+
+<span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
+
+  <span class="p">&lt;</span><span class="nt">nav</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar navbar-inverse&#34;</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;container&#34;</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar-header&#34;</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;button&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar-toggle collapsed&#34;</span> <span class="na">data-toggle</span><span class="o">=</span><span class="s">&#34;collapse&#34;</span> <span class="na">data-target</span><span class="o">=</span><span class="s">&#34;#navbar&#34;</span>
+          <span class="na">aria-expanded</span><span class="o">=</span><span class="s">&#34;false&#34;</span> <span class="na">aria-controls</span><span class="o">=</span><span class="s">&#34;navbar&#34;</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;sr-only&#34;</span><span class="p">&gt;</span>Toggle navigation<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;icon-bar&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;icon-bar&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">span</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;icon-bar&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+        <span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar-brand&#34;</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&#34;/index&#34;</span><span class="p">&gt;</span>
+            <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>Game Reviews<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+          <span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>
+        <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+      <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;navbar&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar-collapse collapse&#34;</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">form</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;navbar-form navbar-right&#34;</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;form-group&#34;</span><span class="p">&gt;</span>
+            <span class="p">&lt;</span><span class="nt">input</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;search-filter-text&#34;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;text&#34;</span> <span class="na">placeholder</span><span class="o">=</span><span class="s">&#34;Search&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;form-control&#34;</span><span class="p">&gt;</span>
+          <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+          <span class="p">&lt;</span><span class="nt">button</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;search-filter-btn&#34;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;submit&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;btn btn-success&#34;</span><span class="p">&gt;</span>Search<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+        <span class="p">&lt;/</span><span class="nt">form</span><span class="p">&gt;</span>
+      <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+      <span class="c">&lt;!--/.navbar-collapse --&gt;</span>
+    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">nav</span><span class="p">&gt;</span>
+
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;jumbotron&#34;</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;container&#34;</span><span class="p">&gt;</span>
+      {{display_options(&#34;Genres&#34;, &#34;genre&#34;, genres, type=&#34;checkbox&#34;)}}
+      {{display_options(&#34;Platforms&#34;, &#34;platforms&#34;, platforms, type=&#34;checkbox&#34;)}}
+      {{display_options(&#34;Reviewers&#34;, &#34;reviewer&#34;, reviewers, type=&#34;radio&#34;)}}
+      {{display_options(&#34;Posted date&#34;, &#34;posted_date&#34;, dates_intervals, type=&#34;radio&#34;)}}
+      {{display_options(&#34;Sort by&#34;, &#34;order&#34;, {&#34;release_date&#34;:&#34;Posted date&#34;, &#34;score&#34;:&#34;Score&#34;}, type=&#34;radio&#34;)}}
+      <span class="p">&lt;</span><span class="nt">button</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;filter-btn&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;btn btn-primary&#34;</span> <span class="na">type</span><span class="o">=</span><span class="s">&#34;button&#34;</span><span class="p">&gt;</span>Filter <span class="p">&lt;</span><span class="nt">span</span>
+          <span class="na">class</span><span class="o">=</span><span class="s">&#34;glyphicon glyphicon-filter&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">span</span><span class="p">&gt;&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;container&#34;</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;main-content&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+
+<span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
+
+<span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
+</code></pre></div><p>In the html head, not only are we importing css and Javascript files (using <code>url_for()</code> to get its location) as we would do on plain HTML, but we are also defining two Javascript variables that will be available on the global scope: <code>request_params</code> and <code>request_url</code>. The latter is just the URL for “/list” that will be used in the AJAX calls. On the flip side, the former is a Javascript object with the request arguments of the AJAX call. Notice that Flask makes the request object available in the template. An example of request_params would be:</p>
+<div class="highlight"><pre class="chroma"><code class="language-json" data-lang="json"><span class="p">{</span>
+    <span class="err">genres:</span> <span class="err">[</span><span class="nt">&#34;Acción&#34;</span><span class="p">,</span> <span class="nt">&#34;RPG&#34;</span><span class="err">]</span><span class="p">,</span>
+    <span class="err">platforms:</span> <span class="nt">&#34;PS4&#34;</span><span class="p">,</span>
+    <span class="err">posted_date:</span> <span class="nt">&#34;Anytime&#34;</span><span class="p">,</span>
+    <span class="err">reviewer:</span> <span class="nt">&#34;any&#34;</span><span class="p">,</span>
+    <span class="err">sort_by:</span> <span class="nt">&#34;score&#34;</span>
+<span class="p">}</span>
+</code></pre></div><p>In the html body we define the filtering menu and the search bar. Note that we make use of the <code>display_options()</code> macro to avoid code duplication. Also note the empty “main-content” div. Here is where the HTML obtained via AJAX will be located.</p>
+<p>The view function associated with the second route is more complex as it gets the request arguments, transforms them into a MongoDB query, runs that query and finally renders the HTML that displays re retrieved results. The python code which does that is the following:</p>
+<div class="highlight"><pre class="chroma"><code class="language-python3" data-lang="python3"><span class="k">def</span> <span class="nf">extract_eq_filters</span><span class="p">():</span>
+    <span class="n">eq_filters</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&#34;reviewer&#34;</span><span class="p">,</span> <span class="s2">&#34;platforms&#34;</span><span class="p">,</span> <span class="s2">&#34;genre&#34;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&#34;reviewer&#34;</span> <span class="ow">and</span> <span class="n">val</span> <span class="o">==</span> <span class="s2">&#34;any&#34;</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">eq_filters</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">eq_filters</span>
+
+
+<span class="k">def</span> <span class="nf">extract_range_filters</span><span class="p">():</span>
+    <span class="n">range_filters</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">date_interval</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&#34;posted_date&#34;</span><span class="p">,</span> <span class="s2">&#34;Anytime&#34;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">date_interval</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&#34;Past week&#34;</span><span class="p">,</span> <span class="s2">&#34;Past month&#34;</span><span class="p">]:</span>
+        <span class="n">today</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="n">range_filters</span><span class="p">[</span><span class="s2">&#34;release_date&#34;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&#34;Past week&#34;</span><span class="p">:</span> <span class="p">(</span><span class="n">today</span> <span class="o">-</span> <span class="n">datetime</span><span class="o">.</span><span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">7</span><span class="p">),</span> <span class="n">today</span><span class="p">),</span>
+                                         <span class="s2">&#34;Past month&#34;</span><span class="p">:</span> <span class="p">(</span><span class="n">today</span> <span class="o">-</span> <span class="n">datetime</span><span class="o">.</span><span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span> <span class="n">today</span><span class="p">)</span>
+                                         <span class="p">}[</span><span class="n">date_interval</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">range_filters</span>
+
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/list&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">list_reviews</span><span class="p">():</span>
+    <span class="k">if</span> <span class="s2">&#34;search&#34;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
+        <span class="n">reviews</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">search_by_name</span><span class="p">(</span><span class="n">coll</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&#34;search&#34;</span><span class="p">))</span>
+        <span class="n">has_next</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">eq_filters</span> <span class="o">=</span> <span class="n">extract_eq_filters</span><span class="p">()</span>
+        <span class="n">range_filters</span> <span class="o">=</span> <span class="n">extract_range_filters</span><span class="p">()</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">build_query</span><span class="p">(</span><span class="n">eq_filters</span><span class="p">,</span> <span class="n">range_filters</span><span class="p">)</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&#34;order&#34;</span><span class="p">,</span> <span class="s2">&#34;release_date&#34;</span><span class="p">)</span>
+        <span class="n">page_num</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&#34;page_num&#34;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">reviews</span><span class="p">,</span> <span class="n">has_next</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">list_reviews</span><span class="p">(</span><span class="n">coll</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">page_size</span><span class="o">=</span><span class="n">PAGE_SIZE</span><span class="p">,</span>
+                                            <span class="n">offset</span><span class="o">=</span><span class="n">page_num</span><span class="o">*</span><span class="n">PAGE_SIZE</span><span class="p">,</span>
+                                            <span class="n">sort_by</span><span class="o">=</span><span class="n">order</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s1">&#39;list.html&#39;</span><span class="p">,</span> <span class="n">reviews</span><span class="o">=</span><span class="n">reviews</span><span class="p">,</span>
+                                        <span class="n">has_next</span><span class="o">=</span><span class="n">has_next</span><span class="p">)</span>
+</code></pre></div><p>First, we determine whether the request is a search by name query or a filter query. If it is the former, we retrieve some reviews by using <code>db.search_by_name()</code>. If it is the latter, we extract the equality and range filters, the ordering and the pagination offset from the request object. Next we use <code>db.list_reviews()</code> to retrieve PAGE_SIZE number of reviews. Finally, we render the results in a template.</p>
+<div class="highlight"><pre class="chroma"><code class="language-html" data-lang="html">{% for review in reviews %}
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;review review-{{review.reviewer}}&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;grid-top grid-left&#34;</span> <span class="na">style</span><span class="o">=</span><span class="s">&#34;text-align: center;&#34;</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;score-wrapper&#34;</span><span class="p">&gt;&lt;</span><span class="nt">span</span><span class="p">&gt;</span>{{review.score}}<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;grid-top grid-right&#34;</span><span class="p">&gt;</span>
+      {{ reviewers_logos[review.reviewer] | safe}}
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;grid-botton grid-left&#34;</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;&lt;</span><span class="nt">strong</span><span class="p">&gt;</span>Plataformas<span class="p">&lt;/</span><span class="nt">strong</span><span class="p">&gt;</span>: {{review.platforms}}<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;&lt;</span><span class="nt">strong</span><span class="p">&gt;</span>Géneros<span class="p">&lt;/</span><span class="nt">strong</span><span class="p">&gt;</span>: {{review.genre}}<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;&lt;</span><span class="nt">strong</span><span class="p">&gt;</span>Fecha de publicación<span class="p">&lt;/</span><span class="nt">strong</span><span class="p">&gt;</span>: {{review.release_date}}<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;grid-botton grid-right&#34;</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">h3</span><span class="p">&gt;&lt;</span><span class="nt">strong</span><span class="p">&gt;</span>{{review.title}}<span class="p">&lt;/</span><span class="nt">strong</span><span class="p">&gt;&lt;/</span><span class="nt">h3</span><span class="p">&gt;</span>
+      <span class="p">&lt;</span><span class="nt">h5</span><span class="p">&gt;</span>{{review.description}}<span class="p">&lt;/</span><span class="nt">h5</span><span class="p">&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">style</span><span class="o">=</span><span class="s">&#34;clear: both;&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+{% endfor %}
+
+{% if has_next %}
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">style</span><span class="o">=</span><span class="s">&#34;text-align: center;&#34;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">button</span> <span class="na">id</span><span class="o">=</span><span class="s">&#34;next_page&#34;</span> <span class="na">class</span><span class="o">=</span><span class="s">&#34;btn btn-primary btn-lg&#34;</span><span class="p">&gt;</span>Next page<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+{% endif %}
+
+</code></pre></div><p>Note that if there are more than PAGE_SIZE elements matching the query, we will render a “More Results” button.</p>
+<h2 id="javascript">Javascript</h2>
+<p>Earlier in this article, I have stated the reason for using AJAX in our web application: paginate the results coming from the MongoDB collection without having to reload the page each time. Right after the page is loaded an AJAX request will be made to retrieve the first PAGE_SIZE reviews. Thanks to the request_params variable that we created server side, the Javascript code knows the filter parameters to query. Another AJAX request will be made if we click on the “More Results” button. Responses of AJAX requests are inserted in the “main-content” div.</p>
+<div class="highlight"><pre class="chroma"><code class="language-js" data-lang="js">
+<span class="kr">const</span> <span class="nx">ajax_url</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">URL</span><span class="p">(</span><span class="nx">request_url</span><span class="p">,</span> <span class="nb">document</span><span class="p">.</span><span class="nx">location</span><span class="p">);</span>
+<span class="kr">const</span> <span class="nx">ajax_params</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">URLSearchParams</span><span class="p">(</span><span class="nx">request_params</span><span class="p">);</span>
+<span class="nx">ajax_url</span><span class="p">.</span><span class="nx">search</span> <span class="o">=</span> <span class="nx">ajax_params</span><span class="p">;</span>
+
+<span class="kd">var</span> <span class="nx">page_num</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">sendGetRequest</span><span class="p">(</span><span class="nx">requestUrl</span><span class="p">,</span> <span class="nx">responseHandler</span><span class="p">,</span><span class="nx">isJsonResponse</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">request</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">XMLHttpRequest</span><span class="p">();</span>
+    <span class="nx">request</span><span class="p">.</span><span class="nx">onreadystatechange</span> <span class="o">=</span> 
+      <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> 
+        <span class="nx">handleResponse</span><span class="p">(</span><span class="nx">request</span><span class="p">,</span> 
+                       <span class="nx">responseHandler</span><span class="p">,</span>
+                       <span class="nx">isJsonResponse</span><span class="p">);</span> 
+      <span class="p">};</span>
+    <span class="nx">request</span><span class="p">.</span><span class="nx">open</span><span class="p">(</span><span class="s2">&#34;GET&#34;</span><span class="p">,</span> <span class="nx">requestUrl</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+    <span class="nx">request</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span> <span class="c1">// for POST only
+</span><span class="c1"></span>  <span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">handleResponse</span><span class="p">(</span><span class="nx">request</span><span class="p">,</span>
+                        <span class="nx">responseHandler</span><span class="p">,</span>
+                        <span class="nx">isJsonResponse</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">((</span><span class="nx">request</span><span class="p">.</span><span class="nx">readyState</span> <span class="o">==</span> <span class="mi">4</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="nx">request</span><span class="p">.</span><span class="nx">status</span> <span class="o">==</span> <span class="mi">200</span><span class="p">))</span> <span class="p">{</span>
+         <span class="nx">responseHandler</span><span class="p">(</span><span class="nx">request</span><span class="p">.</span><span class="nx">responseText</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+
+<span class="kd">function</span> <span class="nx">insert_new_content</span><span class="p">(</span><span class="nx">main_div</span><span class="p">,</span> <span class="nx">responseText</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">new_div</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s1">&#39;div&#39;</span><span class="p">);</span>
+    <span class="nx">new_div</span><span class="p">.</span><span class="nx">innerHTML</span> <span class="o">=</span> <span class="nx">responseText</span><span class="p">;</span>
+    <span class="nx">main_div</span><span class="p">.</span><span class="nx">appendChild</span><span class="p">(</span><span class="nx">new_div</span><span class="p">);</span>
+
+    <span class="kd">var</span> <span class="nx">next_page_button</span> <span class="o">=</span> <span class="nx">main_div</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">&#34;#next_page&#34;</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">next_page_button</span><span class="p">){</span>
+        <span class="nx">next_page_button</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">&#34;click&#34;</span><span class="p">,</span> <span class="nx">next_page</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">&#34;DOMContentLoaded&#34;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">sendGetRequest</span><span class="p">(</span>
+        <span class="nx">ajax_url</span><span class="p">.</span><span class="nx">toString</span><span class="p">(),</span>
+        <span class="kd">function</span> <span class="p">(</span><span class="nx">responseText</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">main_div</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">&#34;#main-content&#34;</span><span class="p">);</span>
+            <span class="nx">insert_new_content</span><span class="p">(</span><span class="nx">main_div</span><span class="p">,</span> <span class="nx">responseText</span><span class="p">);</span>
+        <span class="p">});</span>
+<span class="p">});</span>
+
+
+<span class="kd">function</span> <span class="nx">next_page</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">page_num</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="nx">ajax_params</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="s2">&#34;page_num&#34;</span><span class="p">,</span> <span class="nx">page_num</span><span class="p">);</span>
+  <span class="nx">ajax_url</span><span class="p">.</span><span class="nx">search</span> <span class="o">=</span> <span class="nx">ajax_params</span><span class="p">;</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">ajax_url</span><span class="p">.</span><span class="nx">toString</span><span class="p">());</span>
+  <span class="nx">$ajaxUtils</span><span class="p">.</span><span class="nx">sendGetRequest</span><span class="p">(</span>
+    <span class="nx">ajax_url</span><span class="p">.</span><span class="nx">toString</span><span class="p">(),</span>
+    <span class="kd">function</span> <span class="p">(</span><span class="nx">responseText</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="nx">main_div</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">&#34;#main-content&#34;</span><span class="p">);</span>
+      <span class="nx">main_div</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">&#34;#next_page&#34;</span><span class="p">).</span><span class="nx">remove</span><span class="p">();</span>
+      <span class="nx">insert_new_content</span><span class="p">(</span><span class="nx">main_div</span><span class="p">,</span> <span class="nx">responseText</span><span class="p">);</span>
+    <span class="p">},</span>
+    <span class="kc">false</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>In this post we have created a web application to help us explore the data we collected previously from game reviews websites. We have used Flask to this end as it has all the features we needed while giving us full control over the structure of our project. As for  the client side, we made use of AJAX to implement the pagination of the results.</p>
+
+</section>
+
+
+    <footer class="article-footer">
+    
+    <section class="article-tags">
+        
+            <a href="/tags/python/">python</a>
+        
+            <a href="/tags/flask/">flask</a>
+        
+            <a href="/tags/mongodb/">mongodb</a>
+        
+            <a href="/tags/javascript/">javascript</a>
+        
+    </section>
+
+
+    
+    <section class="article-copyright">
+        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z"/>
+  <circle cx="12" cy="12" r="9" />
+  <path d="M14.5 9a3.5 4 0 1 0 0 6" />
+</svg>
+
+
+
+        <span>Licensed under CC BY-NC-SA 4.0</span>
+    </section>
+    </footer>
+
+    
+</article>
+
+    <aside class="related-contents--wrapper">
+    
+    
+        <h2 class="section-title">Related contents</h2>
+        <div class="related-contents">
+            <div class="flex article-list--tile">
+                
+                    
+<article class="has-image">
+    <a href="/p/scraping-game-reviews-websites-with-scrapy-and-selenium/">
+        
+        
+            <div class="article-image">
+                <img src="/p/scraping-game-reviews-websites-with-scrapy-and-selenium/scrapy.cdf5064c93c4fcb491aad5b6c070cce4_hu70fdb0b361d7eb79037c82a83a9560bd_43195_250x150_fill_box_smart1_2.png" 
+                        width="250" 
+                        height="150" 
+                        loading="lazy" 
+                        data-key="" 
+                        data-hash="md5-zfUGTJPE/LSRqtW2wHDM5A==">
+                
+            </div>
+        
+
+        <div class="article-details">
+            <h2 class="article-title">Scraping Game Reviews Websites with Scrapy and Selenium</h2>
+        </div>
+    </a>
+</article>
+                
+            </div>
+        </div>
+    
+</aside>
+
+
+    
+        
+    
+
+    <footer class="site-footer">
+    <section class="copyright">
+        &copy; 
+        
+            2020 - 
+        
+        2021 David Gallardo
+    </section>
+    
+    <section class="powerby">
+        Built with <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a> <br />
+        Theme <b><a href="https://github.com/CaiJimmy/hugo-theme-stack" target="_blank" rel="noopener" data-version="2.2.0">Stack</a></b> designed by <a href="https://jimmycai.com" target="_blank" rel="noopener">Jimmy</a>
+    </section>
+</footer>
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    
+    <div class="pswp__bg"></div>
+
+    
+    <div class="pswp__scroll-wrap">
+
+        
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                
+                
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div><script 
+                src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo="crossorigin="anonymous"
+                defer="true"
+                >
+            </script><script 
+                src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU="crossorigin="anonymous"
+                defer="true"
+                >
+            </script><link 
+                rel="stylesheet" 
+                href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css"integrity="sha256-c0uckgykQ9v5k&#43;IqViZOZKc47Jn7KQil4/MP3ySA3F8="crossorigin="anonymous"
+            ><link 
+                rel="stylesheet" 
+                href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.css"integrity="sha256-SBLU4vv6CA6lHsZ1XyTdhyjJxCjPif/TRkjnsyGAGnE="crossorigin="anonymous"
+            >
+            </main>
+        </div>
+        <script 
+                src="https://cdn.jsdelivr.net/npm/node-vibrant@3.1.5/dist/vibrant.min.js"integrity="sha256-5NovOZc4iwiAWTYIFiIM7DxKUXKWvpVEuMEPLzcm5/g="crossorigin="anonymous"
+                defer="false"
+                >
+            </script><script type="text/javascript" src="/ts/main.js" defer></script>
+<script>
+    (function () {
+        const customFont = document.createElement('link');
+        customFont.href = "https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap";
+
+        customFont.type = "text/css";
+        customFont.rel = "stylesheet";
+
+        document.head.appendChild(customFont);
+    }());
+</script>
+<style>
+    .article-content p {
+            text-align: justify;
+        }
+    .article-content h2 {
+        margin-top: 50px;
+    }
+
+    footer.article-footer {
+        padding-top: 50px;
+    }
+</style>
+    </body>
+</html>
