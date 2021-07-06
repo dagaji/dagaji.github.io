@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>web development on David Gallardo</title>
+    <link>https://example.com/categories/web-development/</link>
+    <description>Recent content in web development on David Gallardo</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 16 Feb 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://example.com/categories/web-development/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Building a website to display the scraped data</title>
+      <link>https://example.com/p/building-a-website-to-display-the-scraped-data/</link>
+      <pubDate>Tue, 16 Feb 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://example.com/p/building-a-website-to-display-the-scraped-data/</guid>
+      <description>Project Description Last time, we implemented a web scraper to extract game reviews and store them in a MongoDB collection. Although the last project was valuable on its own, it would be nice to extend it so that we can also explore the data we have collected. One solution is to create a website that allows us to make queries to the MongoDB collection and display the results.
+There are a number of full-featured web frameworks available in Python (Django, Pyramid, Web2py, etc ), but as our website will be a simple one, a lightweight framework like Flask will suffice.</description>
+    </item>
+    
+  </channel>
+</rss>
